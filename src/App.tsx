@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Activity, AlertTriangle, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ClipboardCheck, FileText, Flame, Gauge, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Siren, Thermometer, Users, Waves, Wrench, X, Zap } from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
+import { AuthGate, type UserProfile } from "./components/AuthGate";
+import { BoilerMonitor } from "./components/BoilerMonitor";
+import { supabase } from "./lib/supabase";
 
 type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
 type Severity = "Normal" | "Warning" | "Critical";
@@ -18,27 +22,36 @@ function severity(value:number,key:keyof typeof limits):Severity { const l=limit
 function StatusPill({status}:{status:string}) { const tone=["Normal","Running","Completed","Scheduled"].includes(status)?"green":["Critical","Overdue"].includes(status)?"red":"amber"; return <span className={`pill ${tone}`}><span className="pill-dot"/>{status}</span>; }
 
 export default function Home(){
+  return <AuthGate>{(session, profile) => <AuthenticatedApp session={session} profile={profile} />}</AuthGate>;
+}
+
+function AuthenticatedApp({session, profile}:{session:Session;profile:UserProfile|null}){
   const[active,setActive]=useState<Section>("Dashboard"),[mobile,setMobile]=useState(false),[alert,setAlert]=useState(true),[toast,setToast]=useState("");
   const[readings,setReadings]=useState({pressure:9.6,waterLevel:62,steamTemp:184,flueTemp:228});
   const[checks,setChecks]=useState([true,true,true,true,true,true,true,true,true,false]);
   const warningCount=useMemo(()=>Object.entries(readings).filter(([k,v])=>severity(v,k as keyof typeof limits)!=="Normal").length,[readings]);
   const notify=(m:string)=>{setToast(m);window.setTimeout(()=>setToast(""),2500)};
   const go=(s:Section)=>{setActive(s);setMobile(false)};
+  const visibleNav=profile?.role==="admin"?nav:nav.filter(item=>item.label!=="Admin Panel");
+  const displayName=profile?.full_name||session.user.user_metadata.full_name||session.user.email?.split("@")[0]||"SteamGuard User";
+  const role=(profile?.role||"operator").replace(/^./,letter=>letter.toUpperCase());
+  const initials=displayName.split(" ").map((part:string)=>part[0]).join("").slice(0,2).toUpperCase();
   return <div className="app-shell">
     <aside className={`sidebar ${mobile?"open":""}`}><div className="brand"><div className="brand-mark"><ShieldCheck/><Flame/></div><div><strong>SteamGuard</strong><span>Operations & Maintenance</span></div><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div>
-      <nav>{nav.map(({label,icon:Icon})=><button key={label} className={active===label?"active":""} onClick={()=>go(label)}><Icon size={19}/><span>{label}</span>{label==="Incidents"&&<b className="nav-count">2</b>}</button>)}</nav>
-      <div className="sidebar-foot"><div className="system-health"><span/><div><b>System Online</b><small>Last sync: just now</small></div></div><button><LogOut size={18}/>Sign out</button></div>
+      <nav>{visibleNav.map(({label,icon:Icon})=><button key={label} className={active===label?"active":""} onClick={()=>go(label)}><Icon size={19}/><span>{label}</span>{label==="Incidents"&&<b className="nav-count">2</b>}</button>)}</nav>
+      <div className="sidebar-foot"><div className="system-health"><span/><div><b>System Online</b><small>Connected securely</small></div></div><button onClick={()=>void supabase.auth.signOut()}><LogOut size={18}/>Sign out</button></div>
     </aside>
-    <div className="main-column"><header><button className="menu-button" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title"><h1>{active}</h1><p>Boiler Operations & Maintenance</p></div><div className="header-actions"><button className="shift-button"><CalendarClock size={18}/>Shift A<ChevronDown size={15}/></button><button className="icon-button"><Bell size={20}/><i>{warningCount}</i></button><div className="profile"><div className="avatar">AK</div><div><b>Ajith Kumar</b><span>Boiler Operator</span></div></div></div></header>
-      <main>{active==="Dashboard"&&<Dashboard readings={readings} warningCount={warningCount} checks={checks} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<Checklist values={checks} setValues={setChecks} notify={notify}/>} {active==="Maintenance"&&<Maintenance notify={notify}/>} {!['Dashboard','Boiler Logbook','Safety Checklist','Maintenance'].includes(active)&&<ModulePage title={active} notify={notify}/>}</main>
+    <div className="main-column"><header><button className="menu-button" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title"><h1>{active}</h1><p>Boiler Operations & Maintenance</p></div><div className="header-actions"><button className="shift-button"><CalendarClock size={18}/>Shift A<ChevronDown size={15}/></button><button className="icon-button"><Bell size={20}/><i>{warningCount}</i></button><div className="profile"><div className="avatar">{initials}</div><div><b>{displayName}</b><span>{role}</span></div></div></div></header>
+      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} checks={checks} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<Checklist values={checks} setValues={setChecks} notify={notify}/>} {active==="Maintenance"&&<Maintenance notify={notify}/>} {!['Dashboard','Boiler Logbook','Safety Checklist','Maintenance'].includes(active)&&<ModulePage title={active} notify={notify}/>}</main>
     </div>{mobile&&<button className="backdrop" onClick={()=>setMobile(false)}/>} {toast&&<div className="toast"><CheckCircle2 size={19}/>{toast}</div>}
   </div>;
 }
 
-function Dashboard({readings,warningCount,checks,alert,acknowledge,go}:{readings:{pressure:number;waterLevel:number;steamTemp:number;flueTemp:number};warningCount:number;checks:boolean[];alert:boolean;acknowledge:()=>void;go:(s:Section)=>void}){
+function Dashboard({session,profile,readings,warningCount,checks,alert,acknowledge,go}:{session:Session;profile:UserProfile|null;readings:{pressure:number;waterLevel:number;steamTemp:number;flueTemp:number};warningCount:number;checks:boolean[];alert:boolean;acknowledge:()=>void;go:(s:Section)=>void}){
  const done=checks.filter(Boolean).length;
  return <>{alert&&<div className="alert-banner"><AlertTriangle/><div><b>Warning:</b> Flue gas temperature is above the configured limit.</div><button onClick={acknowledge}>Acknowledge</button></div>}
  <div className="page-heading"><div><p className="eyebrow">PLANT 01 · BOILER SG-01</p><h2>Operations overview</h2><span>Last reading recorded today at 10:00 AM</span></div><button className="primary" onClick={()=>go("Boiler Logbook")}><Zap size={17}/>Add reading</button></div>
+ <BoilerMonitor session={session} profile={profile}/>
  <section className="stats-grid"><Metric icon={Flame} label="Boiler status" value="Running" sub="All systems operational" status="Normal"/><Metric icon={Gauge} label="Steam pressure" value={`${readings.pressure} bar`} sub="Approved range 6–12 bar" status={severity(readings.pressure,"pressure")}/><Metric icon={Waves} label="Water level" value={`${readings.waterLevel}%`} sub="Approved range 40–80%" status={severity(readings.waterLevel,"waterLevel")}/><Metric icon={AlertTriangle} label="Active alerts" value={String(warningCount)} sub="Requires acknowledgement" status={warningCount?"Warning":"Normal"}/></section>
  <section className="dashboard-grid">
   <article className="panel pressure-panel"><PanelHead title="Steam pressure trend" tag="Last 12 hours"/><div className="chart-wrap"><div className="y-axis"><span>12</span><span>10</span><span>8</span><span>6</span></div><div className="line-chart"><div className="high-line"><span>12.0 high limit</span></div><svg viewBox="0 0 660 190" preserveAspectRatio="none"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2475e8" stopOpacity=".25"/><stop offset="1" stopColor="#2475e8" stopOpacity="0"/></linearGradient></defs><path d={`M 0 ${190-points[0]*12} ${points.map((p,i)=>`L ${i*60} ${190-p*12}`).join(" ")} L 660 190 L 0 190 Z`} fill="url(#fill)"/><path d={`M 0 ${190-points[0]*12} ${points.map((p,i)=>`L ${i*60} ${190-p*12}`).join(" ")}`} fill="none" stroke="#2475e8" strokeWidth="3"/></svg><div className="x-axis"><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span></div></div></div></article>
