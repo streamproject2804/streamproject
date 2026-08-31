@@ -64,4 +64,10 @@ Run `supabase/phase-4-operations.sql` once after Phase 3. This adds:
 - Live report totals
 - Pending-item checklist submission
 
+## Phase 5: automatic user signup
+
+Run `supabase/phase-5-user-signup.sql` once after Phase 4. Users can create
+their own accounts, but remain on a Pending Approval screen until the main
+administrator approves them in Workers List and assigns SG-01, SG-02 or SG-03.
+
 SteamGuard supports operational record management. It does not replace certified boiler controls, alarms, safety interlocks, PLC systems, safety valves, emergency shutdown systems, manufacturer instructions, or approved operating procedures.
