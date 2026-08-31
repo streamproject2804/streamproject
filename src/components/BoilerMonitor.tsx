@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Activity, Flame, LoaderCircle, LogIn, LogOut, Power, Radio, ShieldAlert } from "lucide-react";
+import { Activity, Flame, LoaderCircle, Power, Radio, ShieldAlert } from "lucide-react";
 import type { UserProfile } from "./AuthGate";
 import { supabase } from "../lib/supabase";
 
@@ -14,32 +14,32 @@ type Boiler = {
   status_changed_at: string;
 };
 
-type Presence = {
+type Worker = {
   id: string;
-  boiler_id: number;
-  user_id: string;
-  operator_name: string;
-  presence_status: "in" | "out";
-  changed_at: string;
+  full_name: string;
+  email: string;
+  assigned_boiler_id: number | null;
+  attendance_status: "in" | "out";
+  attendance_changed_at: string;
 };
 
 export function BoilerMonitor({ session, profile }: { session: Session; profile: UserProfile | null }) {
   const [boilers, setBoilers] = useState<Boiler[]>([]);
-  const [presence, setPresence] = useState<Presence[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [boilerResult, presenceResult] = await Promise.all([
+    const [boilerResult, workerResult] = await Promise.all([
       supabase.from("boilers").select("*").order("code"),
-      supabase.from("operator_presence").select("*").order("changed_at", { ascending: false }),
+      supabase.from("workers").select("*").eq("is_active", true).order("full_name"),
     ]);
-    if (boilerResult.error || presenceResult.error) {
-      setError(boilerResult.error?.message || presenceResult.error?.message || "Monitoring data unavailable");
+    if (boilerResult.error || workerResult.error) {
+      setError(boilerResult.error?.message || workerResult.error?.message || "Monitoring data unavailable");
     } else {
       setBoilers((boilerResult.data || []) as Boiler[]);
-      setPresence((presenceResult.data || []) as Presence[]);
+      setWorkers((workerResult.data || []) as Worker[]);
       setError("");
     }
     setLoading(false);
@@ -49,26 +49,10 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
     void load();
     const channel = supabase.channel("steamguard-monitor")
       .on("postgres_changes", { event: "*", schema: "public", table: "boilers" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "operator_presence" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "workers" }, () => void load())
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [load]);
-
-  const setPresenceStatus = async (boiler: Boiler, state: "in" | "out") => {
-    const action = `presence-${boiler.id}`;
-    setBusy(action);
-    setError("");
-    const operatorName = profile?.full_name || session.user.user_metadata.full_name || session.user.email?.split("@")[0] || "Operator";
-    const { error: updateError } = await supabase.from("operator_presence").upsert({
-      boiler_id: boiler.id,
-      user_id: session.user.id,
-      operator_name: operatorName,
-      presence_status: state,
-      changed_at: new Date().toISOString(),
-    }, { onConflict: "boiler_id,user_id" });
-    if (updateError) setError(updateError.message);
-    setBusy(null);
-  };
 
   const setBoilerStatus = async (boiler: Boiler, state: "running" | "off") => {
     const action = `status-${boiler.id}`;
@@ -93,9 +77,9 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
     {error && <div className="monitor-error"><ShieldAlert />{error}</div>}
     <div className="boiler-status-grid">
       {boilers.map(boiler => {
-        const activeOperators = presence.filter(item => item.boiler_id === boiler.id && item.presence_status === "in");
-        const myPresence = presence.find(item => item.boiler_id === boiler.id && item.user_id === session.user.id)?.presence_status || "out";
-        const isBusy = busy === `presence-${boiler.id}` || busy === `status-${boiler.id}`;
+        const assignedWorker = workers.find(item => item.assigned_boiler_id === boiler.id);
+        const canControl = profile?.role === "admin" || profile?.role === "supervisor" || assignedWorker?.email.toLowerCase() === session.user.email?.toLowerCase();
+        const isBusy = busy === `status-${boiler.id}`;
         return <article className="panel boiler-status-card" key={boiler.id}>
           <div className="boiler-card-top">
             <div className={`live-boiler-icon ${boiler.operational_status}`}><Flame /></div>
@@ -103,18 +87,14 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
             <span className={`operation-state ${boiler.operational_status}`}><i />{boiler.operational_status}</span>
           </div>
           <div className="attendance-summary">
-            <span>Operators currently IN</span>
-            <b>{activeOperators.length}</b>
-            <p>{activeOperators.length ? activeOperators.map(item => item.operator_name).join(", ") : "No operator checked in"}</p>
+            <span>Assigned operator</span>
+            <b>{assignedWorker?.attendance_status.toUpperCase() || "—"}</b>
+            <p>{assignedWorker?.full_name || "No worker assigned"}</p>
           </div>
           <div className="monitor-controls">
-            <div><small>My attendance</small><div className="switch-pair">
-              <button disabled={isBusy} className={myPresence === "in" ? "selected in" : ""} onClick={() => void setPresenceStatus(boiler, "in")}><LogIn />IN</button>
-              <button disabled={isBusy} className={myPresence === "out" ? "selected out" : ""} onClick={() => void setPresenceStatus(boiler, "out")}><LogOut />OUT</button>
-            </div></div>
-            <div><small>Boiler operation</small><div className="switch-pair">
-              <button disabled={isBusy} className={boiler.operational_status === "running" ? "selected in" : ""} onClick={() => void setBoilerStatus(boiler, "running")}><Activity />Running</button>
-              <button disabled={isBusy} className={boiler.operational_status === "off" ? "selected out" : ""} onClick={() => void setBoilerStatus(boiler, "off")}><Power />Off</button>
+            <div><small>{canControl ? "Boiler operation" : "View only · assigned operator controls this boiler"}</small><div className="switch-pair">
+              <button disabled={isBusy || !canControl} className={boiler.operational_status === "running" ? "selected in" : ""} onClick={() => void setBoilerStatus(boiler, "running")}><Activity />Running</button>
+              <button disabled={isBusy || !canControl} className={boiler.operational_status === "off" ? "selected out" : ""} onClick={() => void setBoilerStatus(boiler, "off")}><Power />Off</button>
             </div></div>
           </div>
           <time>Updated {new Date(boiler.status_changed_at).toLocaleString()}</time>
