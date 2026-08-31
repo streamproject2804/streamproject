@@ -49,4 +49,19 @@ It creates three 1-ton fire-tube boilers, shared operator IN/OUT attendance,
 Running/Off controls, Realtime subscriptions, and promotes
 `muthusubasri@gmail.com` as the main administrator.
 
+## Phase 4: workforce and operations
+
+Run `supabase/phase-4-operations.sql` once after Phase 3. This adds:
+
+- One active worker assignment per boiler
+- Shared realtime Shift A/B/C selection
+- Worker IN/OUT attendance
+- Assigned-boiler status permissions
+- Shift handover records
+- Maintenance work records
+- Incident reporting
+- Document links
+- Live report totals
+- Pending-item checklist submission
+
 SteamGuard supports operational record management. It does not replace certified boiler controls, alarms, safety interlocks, PLC systems, safety valves, emergency shutdown systems, manufacturer instructions, or approved operating procedures.
