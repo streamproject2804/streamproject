@@ -1,21 +1,24 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ClipboardCheck, FileText, Flame, Gauge, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Siren, Thermometer, Users, Waves, Wrench, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ClipboardCheck, Database, FileText, Flame, Gauge, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Siren, Thermometer, Users, Waves, Wrench, X, Zap } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { AuthGate, type UserProfile } from "./components/AuthGate";
 import { BoilerMonitor } from "./components/BoilerMonitor";
 import { SharedShift } from "./components/SharedShift";
 import { WorkersList } from "./components/WorkersList";
 import { OperationalModule } from "./components/OperationalModules";
+import { NotificationCenter } from "./components/NotificationCenter";
+import { DataStore } from "./components/DataStore";
 import { supabase } from "./lib/supabase";
 
-type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Workers List" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
+type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Workers List" | "Data Store" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
 type Severity = "Normal" | "Warning" | "Critical";
 const nav: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Dashboard", icon: LayoutDashboard }, { label: "Boiler Logbook", icon: BookOpen },
   { label: "Safety Checklist", icon: ClipboardCheck }, { label: "Shift Handover", icon: Users },
   { label: "Workers List", icon: Users },
+  { label: "Data Store", icon: Database },
   { label: "Maintenance", icon: Wrench }, { label: "Incidents", icon: Siren },
   { label: "Documents", icon: FileText }, { label: "Reports", icon: Activity }, { label: "Admin Panel", icon: Settings },
 ];
@@ -45,8 +48,8 @@ function AuthenticatedApp({session, profile}:{session:Session;profile:UserProfil
       <nav>{visibleNav.map(({label,icon:Icon})=><button key={label} className={active===label?"active":""} onClick={()=>go(label)}><Icon size={19}/><span>{label}</span>{label==="Incidents"&&<b className="nav-count">2</b>}</button>)}</nav>
       <div className="sidebar-foot"><div className="system-health"><span/><div><b>System Online</b><small>Connected securely</small></div></div><button onClick={()=>void supabase.auth.signOut()}><LogOut size={18}/>Sign out</button></div>
     </aside>
-    <div className="main-column"><header><button className="menu-button" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title"><h1>{active}</h1><p>Boiler Operations & Maintenance</p></div><div className="header-actions"><SharedShift/><button className="icon-button"><Bell size={20}/><i>{warningCount}</i></button><div className="profile"><div className="avatar">{initials}</div><div><b>{displayName}</b><span>{role}</span></div></div></div></header>
-      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} checks={checks} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<Checklist values={checks} setValues={setChecks} notify={notify}/>} {active==="Workers List"&&<WorkersList profile={profile} notify={notify}/>} {(["Shift Handover","Maintenance","Incidents","Documents","Reports"] as Section[]).includes(active)&&<OperationalModule title={active as "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports"} notify={notify}/>} {active==="Admin Panel"&&<ModulePage title={active} notify={notify}/>}</main>
+    <div className="main-column"><header><button className="menu-button" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title"><h1>{active}</h1><p>Boiler Operations & Maintenance</p></div><div className="header-actions"><SharedShift/><NotificationCenter/><div className="profile"><div className="avatar">{initials}</div><div><b>{displayName}</b><span>{role}</span></div></div></div></header>
+      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} checks={checks} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<Checklist values={checks} setValues={setChecks} notify={notify}/>} {active==="Workers List"&&<WorkersList profile={profile} notify={notify}/>} {active==="Data Store"&&<DataStore session={session} profile={profile} notify={notify}/>} {(["Shift Handover","Maintenance","Incidents","Documents","Reports"] as Section[]).includes(active)&&<OperationalModule title={active as "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports"} notify={notify}/>} {active==="Admin Panel"&&<ModulePage title={active} notify={notify}/>}</main>
     </div>{mobile&&<button className="backdrop" onClick={()=>setMobile(false)}/>} {toast&&<div className="toast"><CheckCircle2 size={19}/>{toast}</div>}
   </div>;
 }
@@ -56,14 +59,7 @@ function Dashboard({session,profile,readings,warningCount,checks,alert,acknowled
  return <>{alert&&<div className="alert-banner"><AlertTriangle/><div><b>Warning:</b> Flue gas temperature is above the configured limit.</div><button onClick={acknowledge}>Acknowledge</button></div>}
  <div className="page-heading"><div><p className="eyebrow">PLANT 01 · BOILER SG-01</p><h2>Operations overview</h2><span>Last reading recorded today at 10:00 AM</span></div><button className="primary" onClick={()=>go("Boiler Logbook")}><Zap size={17}/>Add reading</button></div>
  <BoilerMonitor session={session} profile={profile}/>
- <section className="stats-grid"><Metric icon={Flame} label="Boiler status" value="Running" sub="All systems operational" status="Normal"/><Metric icon={Gauge} label="Steam pressure" value={`${readings.pressure} bar`} sub="Approved range 6–12 bar" status={severity(readings.pressure,"pressure")}/><Metric icon={Waves} label="Water level" value={`${readings.waterLevel}%`} sub="Approved range 40–80%" status={severity(readings.waterLevel,"waterLevel")}/><Metric icon={AlertTriangle} label="Active alerts" value={String(warningCount)} sub="Requires acknowledgement" status={warningCount?"Warning":"Normal"}/></section>
- <section className="dashboard-grid">
-  <article className="panel pressure-panel"><PanelHead title="Steam pressure trend" tag="Last 12 hours"/><div className="chart-wrap"><div className="y-axis"><span>12</span><span>10</span><span>8</span><span>6</span></div><div className="line-chart"><div className="high-line"><span>12.0 high limit</span></div><svg viewBox="0 0 660 190" preserveAspectRatio="none"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2475e8" stopOpacity=".25"/><stop offset="1" stopColor="#2475e8" stopOpacity="0"/></linearGradient></defs><path d={`M 0 ${190-points[0]*12} ${points.map((p,i)=>`L ${i*60} ${190-p*12}`).join(" ")} L 660 190 L 0 190 Z`} fill="url(#fill)"/><path d={`M 0 ${190-points[0]*12} ${points.map((p,i)=>`L ${i*60} ${190-p*12}`).join(" ")}`} fill="none" stroke="#2475e8" strokeWidth="3"/></svg><div className="x-axis"><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span></div></div></div></article>
-  <article className="panel boiler-panel"><PanelHead title="Boiler overview" tag="SG-01"/><div className="boiler-visual"><div className="boiler-art"><div className="chimney"/><div className="tank"><div className="door"><Flame/></div></div><div className="pipe"/><div className="feet"><span/><span/></div></div></div><div className="reading-list"><Reading icon={Thermometer} label="Steam temperature" value={`${readings.steamTemp}°C`}/><Reading icon={Waves} label="Feed water" value="78°C"/><Reading icon={Flame} label="Furnace" value="820°C"/><Reading icon={Activity} label="Operating hours" value="08:42"/></div></article>
-  <article className="panel performance-panel"><PanelHead title="Fuel vs steam performance" tag="Today"/><div className="bar-chart">{bars.map((n,i)=><div key={i} className="bar-column"><span className="steam-dot" style={{bottom:`${n+12}%`}}/><i style={{height:`${n}%`}}/></div>)}</div><div className="chart-legend"><span><i className="fuel-key"/>Fuel consumption</span><span><i className="steam-key"/>Steam generation</span></div></article>
-  <article className="panel checklist-panel"><PanelHead title="Safety checklist" tag="Shift A"/><div className="progress-ring" style={{"--progress":`${done*10}%`} as React.CSSProperties}><div><b>{done}/10</b><span>Completed</span></div></div><div className="check-meta"><b>{done*10}% complete</b><span><CheckCircle2/>{done} completed</span><span className="pending"><CalendarClock/>{10-done} pending</span><button onClick={()=>go("Safety Checklist")}>View checklist</button></div></article>
-  <article className="panel maintenance-panel"><PanelHead title="Upcoming maintenance" tag="View all"/><MaintenanceRow icon={Waves} title="Feed water pump" desc="Bearing inspection" date="28 Aug" status="Scheduled"/><MaintenanceRow icon={ShieldCheck} title="Safety valve" desc="Quarterly inspection" date="30 Aug" status="Due soon"/><MaintenanceRow icon={Flame} title="Main burner" desc="Cleaning & tuning" date="02 Sep" status="Planned"/></article>
- </section><p className="disclaimer"><ShieldCheck size={16}/>SteamGuard supports operational record management. It does not replace certified boiler controls, alarms, safety interlocks, or approved operating procedures.</p></>;
+ <p className="disclaimer"><ShieldCheck size={16}/>Dashboard displays stored operational status only. SteamGuard does not replace certified controls, alarms, safety interlocks, or approved operating procedures.</p></>;
 }
 function Metric({icon:Icon,label,value,sub,status}:{icon:typeof Flame;label:string;value:string;sub:string;status:string}){return <article className="metric"><div className={`metric-icon ${status.toLowerCase()}`}><Icon/></div><div className="metric-copy"><span>{label}</span><strong>{value}</strong><small>{sub}</small></div><StatusPill status={status}/></article>}
 function PanelHead({title,tag}:{title:string;tag:string}){return <div className="panel-head"><h3>{title}</h3><span>{tag}</span></div>}
