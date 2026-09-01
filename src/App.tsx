@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ClipboardCheck, Database, FileText, Flame, Gauge, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Siren, Thermometer, Users, Waves, Wrench, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ClipboardCheck, Database, FileText, Flame, Fuel, Gauge, LayoutDashboard, LogOut, Megaphone, Menu, Settings, ShieldCheck, Siren, Thermometer, Users, Waves, Wrench, X, Zap } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { AuthGate, type UserProfile } from "./components/AuthGate";
 import { BoilerMonitor } from "./components/BoilerMonitor";
@@ -11,9 +11,13 @@ import { OperationalModule } from "./components/OperationalModules";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { DataStore } from "./components/DataStore";
 import { RuntimeHistory } from "./components/RuntimeHistory";
+import { FuelUsage } from "./components/FuelUsage";
+import { Announcements } from "./components/Announcements";
+import { ChecklistSummary, SharedChecklist } from "./components/SharedChecklist";
+import { BoilerHero } from "./components/BoilerHero";
 import { supabase } from "./lib/supabase";
 
-type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Workers List" | "Data Store" | "Run History" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
+type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Workers List" | "Data Store" | "Run History" | "Fuel Calculation" | "Announcements" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
 type Severity = "Normal" | "Warning" | "Critical";
 const nav: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Dashboard", icon: LayoutDashboard }, { label: "Boiler Logbook", icon: BookOpen },
@@ -21,6 +25,8 @@ const nav: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Workers List", icon: Users },
   { label: "Data Store", icon: Database },
   { label: "Run History", icon: CalendarClock },
+  { label: "Fuel Calculation", icon: Fuel },
+  { label: "Announcements", icon: Megaphone },
   { label: "Maintenance", icon: Wrench }, { label: "Incidents", icon: Siren },
   { label: "Documents", icon: FileText }, { label: "Reports", icon: Activity }, { label: "Admin Panel", icon: Settings },
 ];
@@ -37,7 +43,6 @@ export default function Home(){
 function AuthenticatedApp({session, profile}:{session:Session;profile:UserProfile|null}){
   const[active,setActive]=useState<Section>("Dashboard"),[mobile,setMobile]=useState(false),[alert,setAlert]=useState(true),[toast,setToast]=useState("");
   const[readings,setReadings]=useState({pressure:9.6,waterLevel:62,steamTemp:184,flueTemp:228});
-  const[checks,setChecks]=useState([true,true,true,true,true,true,true,true,true,false]);
   const warningCount=useMemo(()=>Object.entries(readings).filter(([k,v])=>severity(v,k as keyof typeof limits)!=="Normal").length,[readings]);
   const notify=(m:string)=>{setToast(m);window.setTimeout(()=>setToast(""),2500)};
   const go=(s:Section)=>{setActive(s);setMobile(false)};
@@ -51,17 +56,17 @@ function AuthenticatedApp({session, profile}:{session:Session;profile:UserProfil
       <div className="sidebar-foot"><div className="system-health"><span/><div><b>System Online</b><small>Connected securely</small></div></div><button onClick={()=>void supabase.auth.signOut()}><LogOut size={18}/>Sign out</button></div>
     </aside>
     <div className="main-column"><header><button className="menu-button" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title"><h1>{active}</h1><p>Boiler Operations & Maintenance</p></div><div className="header-actions"><SharedShift/><NotificationCenter/><div className="profile"><div className="avatar">{initials}</div><div><b>{displayName}</b><span>{role}</span></div></div></div></header>
-      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} checks={checks} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<Checklist values={checks} setValues={setChecks} notify={notify}/>} {active==="Workers List"&&<WorkersList profile={profile} notify={notify}/>} {active==="Data Store"&&<DataStore session={session} profile={profile} notify={notify}/>} {active==="Run History"&&<RuntimeHistory/>} {(["Shift Handover","Maintenance","Incidents","Documents","Reports"] as Section[]).includes(active)&&<OperationalModule title={active as "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports"} notify={notify}/>} {active==="Admin Panel"&&<ModulePage title={active} notify={notify}/>}</main>
+      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<SharedChecklist notify={notify}/>} {active==="Workers List"&&<WorkersList profile={profile} notify={notify}/>} {active==="Data Store"&&<DataStore session={session} profile={profile} notify={notify}/>} {active==="Run History"&&<RuntimeHistory/>} {active==="Fuel Calculation"&&<FuelUsage session={session} notify={notify}/>} {active==="Announcements"&&<Announcements session={session} profile={profile} notify={notify}/>} {(["Shift Handover","Maintenance","Incidents","Documents","Reports"] as Section[]).includes(active)&&<OperationalModule title={active as "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports"} notify={notify}/>} {active==="Admin Panel"&&<ModulePage title={active} notify={notify}/>}</main>
     </div>{mobile&&<button className="backdrop" onClick={()=>setMobile(false)}/>} {toast&&<div className="toast"><CheckCircle2 size={19}/>{toast}</div>}
   </div>;
 }
 
-function Dashboard({session,profile,readings,warningCount,checks,alert,acknowledge,go}:{session:Session;profile:UserProfile|null;readings:{pressure:number;waterLevel:number;steamTemp:number;flueTemp:number};warningCount:number;checks:boolean[];alert:boolean;acknowledge:()=>void;go:(s:Section)=>void}){
- const done=checks.filter(Boolean).length;
+function Dashboard({session,profile,readings,warningCount,alert,acknowledge,go}:{session:Session;profile:UserProfile|null;readings:{pressure:number;waterLevel:number;steamTemp:number;flueTemp:number};warningCount:number;alert:boolean;acknowledge:()=>void;go:(s:Section)=>void}){
  return <>{alert&&<div className="alert-banner"><AlertTriangle/><div><b>Warning:</b> Flue gas temperature is above the configured limit.</div><button onClick={acknowledge}>Acknowledge</button></div>}
  <div className="page-heading"><div><p className="eyebrow">PLANT 01 · BOILER SG-01</p><h2>Operations overview</h2><span>Last reading recorded today at 10:00 AM</span></div><button className="primary" onClick={()=>go("Boiler Logbook")}><Zap size={17}/>Add reading</button></div>
+ <BoilerHero/>
  <BoilerMonitor session={session} profile={profile}/>
- <article className="panel dashboard-checklist-card"><div className="progress-ring" style={{"--progress":`${done*10}%`} as React.CSSProperties}><div><b>{done*10}%</b><span>Complete</span></div></div><div><p className="eyebrow">SAFETY CHECKLIST</p><h3>{done} of {checks.length} checks complete</h3><p>{checks.length-done} pending item(s). Submission is allowed with pending items.</p><button onClick={()=>go("Safety Checklist")}>Open safety checklist →</button></div></article>
+ <ChecklistSummary open={()=>go("Safety Checklist")}/>
  <p className="disclaimer"><ShieldCheck size={16}/>Dashboard displays stored operational status only. SteamGuard does not replace certified controls, alarms, safety interlocks, or approved operating procedures.</p></>;
 }
 function Metric({icon:Icon,label,value,sub,status}:{icon:typeof Flame;label:string;value:string;sub:string;status:string}){return <article className="metric"><div className={`metric-icon ${status.toLowerCase()}`}><Icon/></div><div className="metric-copy"><span>{label}</span><strong>{value}</strong><small>{sub}</small></div><StatusPill status={status}/></article>}
