@@ -12,6 +12,7 @@ type Boiler = {
   capacity_tons: number;
   operational_status: "running" | "off";
   status_changed_at: string;
+  running_started_at: string | null;
 };
 
 type Worker = {
@@ -29,6 +30,7 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [now, setNow] = useState(Date.now());
 
   const load = useCallback(async () => {
     const [boilerResult, workerResult] = await Promise.all([
@@ -54,15 +56,26 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
     return () => { void supabase.removeChannel(channel); };
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const elapsed = (startedAt: string | null) => {
+    if (!startedAt) return "00:00:00";
+    const seconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
+    return [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60), seconds % 60]
+      .map(value => String(value).padStart(2, "0")).join(":");
+  };
+
   const setBoilerStatus = async (boiler: Boiler, state: "running" | "off") => {
     const action = `status-${boiler.id}`;
     setBusy(action);
     setError("");
-    const { error: updateError } = await supabase.from("boilers").update({
-      operational_status: state,
-      status_changed_by: session.user.id,
-      status_changed_at: new Date().toISOString(),
-    }).eq("id", boiler.id);
+    const { error: updateError } = await supabase.rpc("set_boiler_operational_status", {
+      target_boiler_id: boiler.id,
+      next_status: state,
+    });
     if (updateError) setError(updateError.message);
     setBusy(null);
   };
@@ -90,6 +103,10 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
             <span>Assigned operator</span>
             <b>{assignedWorker?.attendance_status.toUpperCase() || "—"}</b>
             <p>{assignedWorker?.full_name || "No worker assigned"}</p>
+          </div>
+          <div className={`runtime-clock ${boiler.operational_status}`}>
+            <span>{boiler.operational_status === "running" ? "Current running time" : "Runtime stopped"}</span>
+            <strong>{boiler.operational_status === "running" ? elapsed(boiler.running_started_at) : "00:00:00"}</strong>
           </div>
           <div className="monitor-controls">
             <div><small>{canControl ? "Boiler operation" : "View only · assigned operator controls this boiler"}</small><div className="switch-pair">
