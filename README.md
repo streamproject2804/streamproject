@@ -70,4 +70,11 @@ Run `supabase/phase-5-user-signup.sql` once after Phase 4. Users can create
 their own accounts, but remain on a Pending Approval screen until the main
 administrator approves them in Workers List and assigns SG-01, SG-02 or SG-03.
 
+## Phase 6: consolidated repair and evidence store
+
+Run `supabase/phase-6-consolidated-repair.sql` once. It repairs missing Phase 4
+tables/functions, enables worker attendance, changes operational records to
+typed boiler/equipment names, creates maintenance notifications, and configures
+the private `boiler-references` photo bucket plus boiler event records.
+
 SteamGuard supports operational record management. It does not replace certified boiler controls, alarms, safety interlocks, PLC systems, safety valves, emergency shutdown systems, manufacturer instructions, or approved operating procedures.
