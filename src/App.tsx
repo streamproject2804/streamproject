@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Activity, AlertTriangle, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ClipboardCheck, Database, FileText, Flame, Fuel, Gauge, LayoutDashboard, LogOut, Megaphone, Menu, Settings, ShieldCheck, Siren, Thermometer, Users, Waves, Wrench, X, Zap } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { AuthGate, type UserProfile } from "./components/AuthGate";
@@ -15,14 +15,16 @@ import { FuelUsage } from "./components/FuelUsage";
 import { Announcements } from "./components/Announcements";
 import { ChecklistSummary, SharedChecklist } from "./components/SharedChecklist";
 import { BoilerHero } from "./components/BoilerHero";
+import { Attendance } from "./components/Attendance";
 import { supabase } from "./lib/supabase";
 
-type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Workers List" | "Data Store" | "Run History" | "Fuel Calculation" | "Announcements" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
+type Section = "Dashboard" | "Boiler Logbook" | "Safety Checklist" | "Workers List" | "Attendance" | "Data Store" | "Run History" | "Fuel Calculation" | "Announcements" | "Shift Handover" | "Maintenance" | "Incidents" | "Documents" | "Reports" | "Admin Panel";
 type Severity = "Normal" | "Warning" | "Critical";
 const nav: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Dashboard", icon: LayoutDashboard }, { label: "Boiler Logbook", icon: BookOpen },
   { label: "Safety Checklist", icon: ClipboardCheck }, { label: "Shift Handover", icon: Users },
   { label: "Workers List", icon: Users },
+  { label: "Attendance", icon: CheckCircle2 },
   { label: "Data Store", icon: Database },
   { label: "Run History", icon: CalendarClock },
   { label: "Fuel Calculation", icon: Fuel },
@@ -42,6 +44,7 @@ export default function Home(){
 
 function AuthenticatedApp({session, profile}:{session:Session;profile:UserProfile|null}){
   const[active,setActive]=useState<Section>("Dashboard"),[mobile,setMobile]=useState(false),[alert,setAlert]=useState(true),[toast,setToast]=useState("");
+  const[openIncidents,setOpenIncidents]=useState(0);
   const[readings,setReadings]=useState({pressure:9.6,waterLevel:62,steamTemp:184,flueTemp:228});
   const warningCount=useMemo(()=>Object.entries(readings).filter(([k,v])=>severity(v,k as keyof typeof limits)!=="Normal").length,[readings]);
   const notify=(m:string)=>{setToast(m);window.setTimeout(()=>setToast(""),2500)};
@@ -50,13 +53,14 @@ function AuthenticatedApp({session, profile}:{session:Session;profile:UserProfil
   const displayName=profile?.full_name||session.user.user_metadata.full_name||session.user.email?.split("@")[0]||"SteamGuard User";
   const role=(profile?.role||"operator").replace(/^./,letter=>letter.toUpperCase());
   const initials=displayName.split(" ").map((part:string)=>part[0]).join("").slice(0,2).toUpperCase();
+  useEffect(()=>{const load=async()=>{const{count}=await supabase.from("incidents").select("id",{count:"exact",head:true}).neq("status","Resolved");setOpenIncidents(count||0)};void load();const channel=supabase.channel("incident-nav-count").on("postgres_changes",{event:"*",schema:"public",table:"incidents"},()=>void load()).subscribe();return()=>{void supabase.removeChannel(channel)}},[]);
   return <div className="app-shell">
     <aside className={`sidebar ${mobile?"open":""}`}><div className="brand"><div className="brand-mark"><ShieldCheck/><Flame/></div><div><strong>SteamGuard</strong><span>Operations & Maintenance</span></div><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div>
-      <nav>{visibleNav.map(({label,icon:Icon})=><button key={label} className={active===label?"active":""} onClick={()=>go(label)}><Icon size={19}/><span>{label}</span>{label==="Incidents"&&<b className="nav-count">2</b>}</button>)}</nav>
+      <nav>{visibleNav.map(({label,icon:Icon})=><button key={label} className={active===label?"active":""} onClick={()=>go(label)}><Icon size={19}/><span>{label}</span>{label==="Incidents"&&openIncidents>0&&<b className="nav-count">{openIncidents}</b>}</button>)}</nav>
       <div className="sidebar-foot"><div className="system-health"><span/><div><b>System Online</b><small>Connected securely</small></div></div><button onClick={()=>void supabase.auth.signOut()}><LogOut size={18}/>Sign out</button></div>
     </aside>
     <div className="main-column"><header><button className="menu-button" onClick={()=>setMobile(true)}><Menu/></button><div className="header-title"><h1>{active}</h1><p>Boiler Operations & Maintenance</p></div><div className="header-actions"><SharedShift/><NotificationCenter/><div className="profile"><div className="avatar">{initials}</div><div><b>{displayName}</b><span>{role}</span></div></div></div></header>
-      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<SharedChecklist notify={notify}/>} {active==="Workers List"&&<WorkersList profile={profile} notify={notify}/>} {active==="Data Store"&&<DataStore session={session} profile={profile} notify={notify}/>} {active==="Run History"&&<RuntimeHistory/>} {active==="Fuel Calculation"&&<FuelUsage session={session} notify={notify}/>} {active==="Announcements"&&<Announcements session={session} profile={profile} notify={notify}/>} {(["Shift Handover","Maintenance","Incidents","Documents","Reports"] as Section[]).includes(active)&&<OperationalModule title={active as "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports"} notify={notify}/>} {active==="Admin Panel"&&<ModulePage title={active} notify={notify}/>}</main>
+      <main>{active==="Dashboard"&&<Dashboard session={session} profile={profile} readings={readings} warningCount={warningCount} alert={alert} acknowledge={()=>{setAlert(false);notify("Warning acknowledged and recorded")}} go={go}/>} {active==="Boiler Logbook"&&<Logbook readings={readings} setReadings={setReadings} notify={notify}/>} {active==="Safety Checklist"&&<SharedChecklist notify={notify}/>} {active==="Workers List"&&<WorkersList profile={profile} notify={notify}/>} {active==="Attendance"&&<Attendance session={session} notify={notify}/>} {active==="Data Store"&&<DataStore session={session} profile={profile} notify={notify}/>} {active==="Run History"&&<RuntimeHistory/>} {active==="Fuel Calculation"&&<FuelUsage session={session} notify={notify}/>} {active==="Announcements"&&<Announcements session={session} profile={profile} notify={notify}/>} {(["Shift Handover","Maintenance","Incidents","Documents","Reports"] as Section[]).includes(active)&&<OperationalModule title={active as "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports"} notify={notify}/>} {active==="Admin Panel"&&<ModulePage title={active} notify={notify}/>}</main>
     </div>{mobile&&<button className="backdrop" onClick={()=>setMobile(false)}/>} {toast&&<div className="toast"><CheckCircle2 size={19}/>{toast}</div>}
   </div>;
 }
