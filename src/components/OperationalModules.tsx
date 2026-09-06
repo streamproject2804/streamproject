@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { BarChart3, ExternalLink, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
+import { BarChart3, CheckCircle2, ExternalLink, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 export type OperationalSection = "Shift Handover"|"Maintenance"|"Incidents"|"Documents"|"Reports";
@@ -24,7 +24,7 @@ function Records({title,notify}:{title:Exclude<OperationalSection,"Reports">;not
   useEffect(()=>{void load();const c=supabase.channel(`records-${config.table}`).on("postgres_changes",{event:"*",schema:"public",table:config.table},()=>void load()).subscribe();return()=>{void supabase.removeChannel(c)}},[config.table,load]);
   return <section className="module-wrap"><div className="page-heading"><div><p className="eyebrow">{config.eyebrow}</p><h2>{title}</h2><span>{config.description}</span></div><button className="primary" onClick={()=>setOpen(true)}><Plus/>Create new</button></div>
   {error&&<div className="monitor-error">{error}</div>}{(open||editing)&&<RecordForm title={title} boilers={boilers} existing={editing} close={()=>{setOpen(false);setEditing(null)}} done={()=>{setOpen(false);setEditing(null);notify(`${title} record saved`)}}/>}
-  <div className="records-list">{rows.map(row=><RecordCard key={row.id} title={title} row={row} boilers={boilers} edit={()=>setEditing(row)} remove={async()=>{if(!confirm("Delete this record?"))return;const{error:e}=await supabase.from(config.table).delete().eq("id",row.id);if(e)setError(e.message);else notify(`${title} record deleted`)}}/>)}</div>
+  <div className="records-list">{rows.map(row=><RecordCard key={row.id} title={title} row={row} boilers={boilers} edit={()=>setEditing(row)} complete={async()=>{const{error:e}=await supabase.rpc("complete_maintenance_task",{target_task_id:row.id});if(e)setError(e.message);else notify("Maintenance marked completed")} } remove={async()=>{if(!confirm("Delete this record?"))return;const{error:e}=await supabase.from(config.table).delete().eq("id",row.id);if(e)setError(e.message);else notify(`${title} record deleted`)}}/>)}</div>
   {!rows.length&&!open&&<div className="empty-panel panel"><FileText/><h3>No {title.toLowerCase()} records</h3><p>Use Create new to add the first record.</p></div>}</section>;
 }
 
@@ -34,8 +34,8 @@ function RecordForm({title,boilers,existing,close,done}:{title:Exclude<Operation
   const submit=async(e:FormEvent)=>{e.preventDefault();setSaving(true);const user=(await supabase.auth.getUser()).data.user;if(!user){setError("Session expired");setSaving(false);return}
     let payload:Record<string,unknown>;
     if(title==="Shift Handover")payload={shift:form.shift,boiler_name:form.boiler_name,boiler_condition:form.boiler_condition,pending_work:form.pending_work||"",safety_notes:form.safety_notes||"",created_by:user.id};
-    else if(title==="Maintenance")payload={boiler_name:form.boiler_name,equipment:form.equipment,work_type:form.work_type,due_date:form.due_date,priority:form.priority,status:"Scheduled",notes:form.notes||"",created_by:user.id};
-    else if(title==="Incidents")payload={boiler_name:form.boiler_name,title:form.title,severity:form.severity,description:form.description,corrective_action:form.corrective_action||"",status:"Open",reported_by:user.id};
+    else if(title==="Maintenance")payload={boiler_name:form.boiler_name,equipment:form.equipment,work_type:form.work_type,due_date:form.due_date,priority:form.priority,status:existing?.status||"Scheduled",notes:form.notes||"",created_by:user.id};
+    else if(title==="Incidents")payload={boiler_name:form.boiler_name,title:form.title,severity:form.severity,description:form.description,corrective_action:form.corrective_action||"",status:existing?.status||"Open",reported_by:user.id};
     else payload={title:form.title,category:form.category,document_url:form.document_url,expiry_date:form.expiry_date||null,notes:form.notes||"",created_by:user.id};
     const query=supabase.from(settings[title].table);const{error:saveError}=existing?await query.update(payload).eq("id",existing.id):await query.insert(payload);if(saveError)setError(saveError.message);else done();setSaving(false)};
   const BoilerInput=()=> <label>Boiler / Equipment<input required value={form.boiler_name||""} onChange={e=>update("boiler_name",e.target.value)} placeholder="Type SG-01, Main Boiler 1, pump, etc."/></label>;
@@ -47,11 +47,12 @@ function RecordForm({title,boilers,existing,close,done}:{title:Exclude<Operation
   <button className="primary" disabled={saving}>{saving?"Saving…":"Save record"}</button></form></div>;
 }
 
-function RecordCard({title,row,boilers,edit,remove}:{title:Exclude<OperationalSection,"Reports">;row:RecordRow;boilers:Boiler[];edit:()=>void;remove:()=>void}){
+function RecordCard({title,row,boilers,edit,complete,remove}:{title:Exclude<OperationalSection,"Reports">;row:RecordRow;boilers:Boiler[];edit:()=>void;complete:()=>void;remove:()=>void}){
   const boiler=String(row.boiler_name||boilers.find(b=>b.id===Number(row.boiler_id))?.code||"");
   const heading=String(row.title||row.equipment||row.boiler_condition||"Operational record");
   const detail=String(row.description||row.work_type||row.category||row.pending_work||"No additional details");
-  return <article className="panel record-card"><div className="module-card-icon"><FileText/></div><div><span>{boiler||String(row.shift||title)}</span><h3>{heading}</h3><p>{detail}</p><time>{new Date(row.created_at).toLocaleString()}</time></div>{title==="Documents"&&<a href={String(row.document_url)} target="_blank" rel="noreferrer">Open <ExternalLink/></a>}<div className="record-actions"><button onClick={edit}><Pencil/>Edit</button><button onClick={remove}><Trash2/>Delete</button></div></article>;
+  const completed=String(row.status)==="Completed";
+  return <article className={`panel record-card ${completed?"completed-record":""}`}><div className="module-card-icon">{completed?<CheckCircle2/>:<FileText/>}</div><div><span>{boiler||String(row.shift||title)}</span><h3>{heading}</h3><p>{detail}</p><time>{new Date(row.created_at).toLocaleString()}{row.completed_at?` · Completed ${new Date(String(row.completed_at)).toLocaleString()}`:""}</time></div>{title==="Documents"&&<a href={String(row.document_url)} target="_blank" rel="noreferrer">Open <ExternalLink/></a>}<div className="record-actions">{title==="Maintenance"&&!completed&&<button className="complete-record" onClick={complete}><CheckCircle2/>Complete</button>}<button onClick={edit}><Pencil/>Edit</button><button onClick={remove}><Trash2/>Delete</button></div></article>;
 }
 
 function Reports(){
