@@ -18,7 +18,7 @@ as $$
 declare
   is_main_admin boolean;
 begin
-  is_main_admin := lower(coalesce(new.email, '')) = lower('muthusubasri@gmail.com');
+  is_main_admin := lower(coalesce(new.email, '')) = lower('muthuramanajith28@gmail.com');
 
   insert into public.profiles (
     id, full_name, email, role, is_active, approval_status
@@ -38,6 +38,6 @@ $$;
 -- Ensure the main administrator stays approved.
 update public.profiles
 set role = 'admin', is_active = true, approval_status = 'approved'
-where lower(email) = lower('muthusubasri@gmail.com');
+where lower(email) = lower('muthuramanajith28@gmail.com');
 
 alter publication supabase_realtime add table public.profiles;

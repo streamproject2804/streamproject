@@ -87,7 +87,7 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', ''),
     coalesce(new.email, ''),
     case
-      when lower(coalesce(new.email, '')) = lower('muthusubasri@gmail.com')
+      when lower(coalesce(new.email, '')) = lower('muthuramanajith28@gmail.com')
         then 'admin'::public.app_role
       else 'operator'::public.app_role
     end
@@ -99,4 +99,4 @@ $$;
 -- Promote the account immediately if it already exists.
 update public.profiles
 set role = 'admin'
-where lower(email) = lower('muthusubasri@gmail.com');
+where lower(email) = lower('muthuramanajith28@gmail.com');
