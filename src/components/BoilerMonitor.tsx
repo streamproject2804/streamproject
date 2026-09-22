@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Activity, Flame, LoaderCircle, Power, Radio, ShieldAlert } from "lucide-react";
+import { Activity, Flame, LoaderCircle, Power, Radio, ShieldAlert, Users } from "lucide-react";
 import type { UserProfile } from "./AuthGate";
 import { supabase } from "../lib/supabase";
 
@@ -20,6 +20,7 @@ type Worker = {
   full_name: string;
   email: string;
   assigned_boiler_id: number | null;
+  job_role: "boiler_operator" | "worker";
   attendance_status: "in" | "out";
   attendance_changed_at: string;
 };
@@ -90,8 +91,9 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
     {error && <div className="monitor-error"><ShieldAlert />{error}</div>}
     <div className="boiler-status-grid">
       {boilers.map(boiler => {
-        const assignedWorker = workers.find(item => item.assigned_boiler_id === boiler.id);
-        const canControl = profile?.role === "admin" || profile?.role === "supervisor" || assignedWorker?.email.toLowerCase() === session.user.email?.toLowerCase();
+        const assignedWorkers = workers.filter(item => item.assigned_boiler_id === boiler.id);
+        const currentWorker = workers.find(item => item.email.toLowerCase() === session.user.email?.toLowerCase());
+        const canControl = profile?.role === "admin" || profile?.role === "supervisor" || currentWorker?.job_role === "worker" || assignedWorkers.some(item=>item.email.toLowerCase()===session.user.email?.toLowerCase());
         const isBusy = busy === `status-${boiler.id}`;
         return <article className="panel boiler-status-card" key={boiler.id}>
           <div className="boiler-card-top">
@@ -101,12 +103,12 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
           </div>
           <div className="attendance-summary">
             <span>Assigned operator</span>
-            <b>{assignedWorker?.attendance_status.toUpperCase() || "—"}</b>
-            <p>{assignedWorker?.full_name || "No worker assigned"}</p>
+            <b>{assignedWorkers.filter(w=>w.attendance_status==="in").length} IN</b>
+            <p>{assignedWorkers.length?assignedWorkers.map(w=>w.full_name).join(", "):"No operator assigned"}</p>
           </div>
           <div className={`runtime-clock ${boiler.operational_status}`}>
             <span>{boiler.operational_status === "running" ? "Current running time" : "Runtime stopped"}</span>
-            <strong>{boiler.operational_status === "running" ? elapsed(boiler.running_started_at) : "00:00:00"}</strong>
+            <strong>{boiler.operational_status === "running" ? elapsed(boiler.running_started_at||boiler.status_changed_at) : "00:00:00"}</strong>
           </div>
           <div className="monitor-controls">
             <div><small>{canControl ? "Boiler operation" : "View only · assigned operator controls this boiler"}</small><div className="switch-pair">
@@ -117,6 +119,7 @@ export function BoilerMonitor({ session, profile }: { session: Session; profile:
           <time>Updated {new Date(boiler.status_changed_at).toLocaleString()}</time>
         </article>;
       })}
+      <article className="panel boiler-status-card workforce-status-card"><div className="boiler-card-top"><div className="live-boiler-icon running"><Users/></div><div><b>WORKERS</b><h4>General workforce</h4><small>Authorized to operate any registered boiler</small></div><span className={`operation-state ${workers.some(w=>w.job_role==="worker"&&w.attendance_status==="in")?"running":"off"}`}><i/>{workers.some(w=>w.job_role==="worker"&&w.attendance_status==="in")?"active":"off duty"}</span></div><div className="attendance-summary"><span>General workers</span><b>{workers.filter(w=>w.job_role==="worker"&&w.attendance_status==="in").length} IN</b><p>{workers.filter(w=>w.job_role==="worker").map(w=>w.full_name).join(", ")||"No general workers added"}</p></div><p className="worker-control-note">General workers can select and control any boiler from the cards above.</p></article>
     </div>
   </section>;
 }
