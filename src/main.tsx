@@ -6,6 +6,7 @@ import "./phase7.css";
 import "./phase8.css";
 import "./phase9.css";
 import "./phase10.css";
+import "./phase12.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
